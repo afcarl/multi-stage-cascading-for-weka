@@ -138,7 +138,7 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
             kNNSpec[0] = "";
             setKNNClassifier((IBk) Utils.forName(Filter.class, kNNName, kNNSpec));
         } else {
-            setKNNClassifier(getDefaultKNN());
+            this.kNNClassifier = getDefaultKNN();
         }
 
         String percentTrainingSet = Utils.getOption("P", options);
