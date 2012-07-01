@@ -49,6 +49,7 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
     private Instances kNNTrainingInstances;
     private Random random = new Random(getSeed());
     private double percentTrainingInstances = getDefaultPercentage();
+    boolean lastClassifierChanged = false;
 
     @Override
     public void buildClassifier(Instances dataset) throws Exception {
@@ -144,7 +145,7 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
         if (percentTrainingSet.length() != 0) {
             this.percentTrainingInstances = Double.parseDouble(percentTrainingSet);
         } else {
-            this.percentTrainingInstances = 0.8;
+            this.percentTrainingInstances = getDefaultPercentage();
         }
         
         String thresholdsStr = Utils.getOption("T", options);
@@ -174,14 +175,20 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
 
         result = new Vector();
 
-        result.add("-T");
-        result.add("" + Utils.arrayToString(getThresholds()));
+        if (thresholdChanged()) {
+            result.add("-T");
+            result.add("" + Utils.arrayToString(getThresholds()));
+        }
 
-        result.add("-P");
-        result.add("" + getPercentTrainingInstances());
+        if (percentTrainingInstnacesChanged()) {
+            result.add("-P");
+            result.add("" + getPercentTrainingInstances());
+        }
         
-        result.add("-K");
-        result.add("" + kNNClassifier.getClass().getName() + " " + Utils.joinOptions(((OptionHandler)kNNClassifier).getOptions()));
+        if (lastClassifierChanged()) {
+            result.add("-K");
+            result.add("" + kNNClassifier.getClass().getName() + " " + Utils.joinOptions(((OptionHandler)kNNClassifier).getOptions()));
+        }
 
         options = super.getOptions();
         for (i = 0; i < options.length; i++) {
@@ -189,6 +196,18 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
         }
 
         return (String[]) result.toArray(new String[result.size()]);
+    }
+    
+    private boolean thresholdChanged() {
+        return this.thresholds.length != 0 && this.thresholds[0] != 0.5;
+    }
+
+    private boolean percentTrainingInstnacesChanged() {
+        return this.percentTrainingInstances != getDefaultPercentage();
+    }
+
+    private boolean lastClassifierChanged() {
+        return this.lastClassifierChanged;
     }
 
     @Override
@@ -225,6 +244,7 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
 
     public void setKNNClassifier(Classifier kNNClassifier) {
         this.kNNClassifier = kNNClassifier;
+        this.lastClassifierChanged = true;
     }
 
     public String KNNClassifierTipText() {
@@ -400,4 +420,6 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
     private double getDefaultPercentage() {
         return 0.8;
     }
+
+   
 }
