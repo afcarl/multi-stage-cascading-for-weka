@@ -56,11 +56,13 @@ public class MultiStageCascadingForWeka {
         
         msc.setClassifiers(new Classifier[] {classifier1, new NBTree()});
         msc.setDebug(true);
-        msc.setKNNClassifier(knn);
+        msc.setLastClassifier(knn);
         
         
         msc.setThresholds("0.95,0.97");
         msc.setPercentTrainingInstances(0.8);
+        
+        String[] options = msc.getOptions();
         
         Instances dataset = DataSource.read("D:\\Datasets\\ImageSpam\\WorkFiles\\ARFFs\\textRegionBasedFeatures.arff");
         dataset.setClassIndex(dataset.numAttributes() - 1);

@@ -136,7 +136,7 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
             }
             String kNNName = kNNSpec[0];
             kNNSpec[0] = "";
-            setKNNClassifier((IBk) Utils.forName(Filter.class, kNNName, kNNSpec));
+            setLastClassifier((IBk) Utils.forName(Filter.class, kNNName, kNNSpec));
         } else {
             this.kNNClassifier = getDefaultKNN();
         }
@@ -152,7 +152,7 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
         if (percentTrainingSet.length() !=0) {
             setThresholds(thresholdsStr);
         } else {
-            this.thresholds = getThresholds();
+            this.thresholds = getDefaultThresholds();
         }
 
         super.setOptions(options);
@@ -177,7 +177,7 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
 
         if (thresholdChanged()) {
             result.add("-T");
-            result.add("" + Utils.arrayToString(getThresholds()));
+            result.add("" + Utils.arrayToString(this.thresholds));
         }
 
         if (percentTrainingInstnacesChanged()) {
@@ -229,8 +229,8 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
         this.thresholds = thresholds;
     }
 
-    public double[] getThresholds() {
-        return this.thresholds;
+    public String getThresholds() {
+        return Utils.arrayToString(this.thresholds);
     }
 
     public String thresholdsTipText() {
@@ -238,16 +238,16 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
                 + "for the first classifier.";
     }
 
-    public Classifier getKNNClassifier() {
+    public Classifier getLastClassifier() {
         return this.kNNClassifier;
     }
 
-    public void setKNNClassifier(Classifier kNNClassifier) {
+    public void setLastClassifier(Classifier kNNClassifier) {
         this.kNNClassifier = kNNClassifier;
         this.lastClassifierChanged = true;
     }
 
-    public String KNNClassifierTipText() {
+    public String lastClassifierTipText() {
         return "kNN classifier that will be used by cascading algorithm if non of "
                 + "the user specified classifers are confident in their decision";
     }
@@ -403,7 +403,7 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
         return new IBk();
     }
 
-    private double[] getDefaultProbabilities() {
+    private double[] getDefaultThresholds() {
         return getDefaultProbabilities(getClassifiers().length);
     }
     
