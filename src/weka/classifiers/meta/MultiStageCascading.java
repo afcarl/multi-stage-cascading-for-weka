@@ -490,14 +490,18 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
      */
     private void updateInstancesProbabilities(Classifier classifier) throws Exception {
 
+        int classIndex = trainInstances.classIndex();
+        
         double sum = 0;
         for (int i = 0; i < trainInstances.numInstances(); i++) {
             Instance instance = trainInstances.instance(i);
 
             double[] distribution = classifier.distributionForInstance(instance);
-            double maxProbability = getConfidence(distribution);
-            this.selectProbabilities[i] = maxProbability;
-            sum += maxProbability;
+                       
+            double classValue = instance.value(classIndex);
+            double currentClassConfidence = distribution[(int) classValue];
+            this.selectProbabilities[i] = currentClassConfidence;
+            sum += currentClassConfidence;
         }
 
         for (int i = 0; i < this.selectProbabilities.length; i++) {
@@ -511,6 +515,8 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
      */
     private void trainLastClassifier() throws Exception {
 
+        int classIndex = trainInstances.classIndex();
+        
         Instances kNNInstances = new Instances(this.lastClassifierTrainingInstances, 0, 0);
         for (int i = 0; i < this.lastClassifierTrainingInstances.numInstances(); i++) {
             Instance instance = this.lastClassifierTrainingInstances.instance(i);
@@ -521,8 +527,9 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
                 Classifier classifier = classifiers[ci];
                 double[] distribution = classifier.distributionForInstance(instance);
 
-                double confidence = getConfidence(distribution);
-                if (classifierIsConfident(confidence, ci)) {
+                double classValue = instance.value(classIndex);
+                double currentClassConfidence = distribution[(int) classValue];
+                if (classifierIsConfident(currentClassConfidence, ci)) {
                     confidentClassifierFound = true;
                     break;
                 }
