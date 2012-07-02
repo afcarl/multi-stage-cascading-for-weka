@@ -1,6 +1,17 @@
 /*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
+ *This file is part of MultiStageCascading for Weka.
+ * Foobar is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * MultiStageCascading for Weka is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with MultiStageCascading for Weka.  If not, see <http://www.gnu.org/licenses/>.
  */
 package multistagecascadingforweka;
 
@@ -42,6 +53,7 @@ class Pair<F, S> {
 
 /**
  *
+ * Example of how MultiStage Cascading can be used in your code.
  * @author Ivan Mushketyk <ivan.mushketik at gmail.com>
  */
 public class MultiStageCascadingForWeka {
@@ -59,7 +71,7 @@ public class MultiStageCascadingForWeka {
         msc.setLastClassifier(knn);
         
         
-        msc.setThresholds("0.95,0.97");
+        msc.setConfidenceThresholds("0.95,0.97");
         msc.setPercentTrainingInstances(0.8);
         
         String[] options = msc.getOptions();

@@ -11,7 +11,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
+ * along with MultiStageCascading for Weka.  If not, see <http://www.gnu.org/licenses/>.
  */
 package weka.classifiers.meta;
 
@@ -26,14 +26,54 @@ import weka.core.*;
 import weka.filters.Filter;
 
 /**
- * <!-- globalinfo-start --> <!-- globalinfo-end -->
+ <!-- globalinfo-start -->
+ * MultiStage Cascading classifier use several consequent classifers to predict a class of an instance. The next classifier is used only if previous classifier is not confident. If all classifiers are not confident kNN classifier is used to classify the instance
+ * <p/>
+ <!-- globalinfo-end -->
  *
- * <!-- technical-bibtex-start -- <!-- technical-bibtex-end -->
+ <!-- technical-bibtex-start -->
+ * BibTeX:
+ * <pre>
+ * &#64;conference{CenkKaynak2000,
+ *    author = {Cenk Kaynak, Ethem Alpaydin},
+ *    organization = {Proceedings of the 25th international conference on Machine learning (2000) },
+ *    pages = {455-462},
+ *    title = {MultiStage Cascading of Multiple Classifiers: One Man's Noise is Another Man's Data},
+ *    year = {2000}
+ * }
+ * </pre>
+ * <p/>
+ <!-- technical-bibtex-end -->
  *
- * <!-- options-start --> <!-- options-end -->
+ <!-- options-start -->
+ * Valid options are: <p/>
+ * 
+ * <pre> -T &lt;thresholds for classifers&gt;
+ *  Thresholds of confidence for classifiers.</pre>
+ * 
+ * <pre> -P &lt;thresholds for classifers&gt;
+ *  Percentage of training instances that will be used for training each classifier.</pre>
+ * 
+ * <pre> -K &lt;IBk classifier&gt;
+ *  kNN classifier that will be used if all user-specified classifiers are not confident in their predictions.</pre>
+ * 
+ * <pre> -S &lt;num&gt;
+ *  Random number seed.
+ *  (default 1)</pre>
+ * 
+ * <pre> -B &lt;classifier specification&gt;
+ *  Full class name of classifier to include, followed
+ *  by scheme options. May be specified multiple times.
+ *  (default: "weka.classifiers.rules.ZeroR")</pre>
+ * 
+ * <pre> -D
+ *  If set, classifier is run in debug mode and
+ *  may output additional info to the console</pre>
+ * 
+ <!-- options-end -->
  *
  * @author Ivan Mushketyk <ivan.mushketik at gmail.com>
- * @version 0.1
+ * @version 0.6
  */
 public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
         implements TechnicalInformationHandler {
@@ -42,19 +82,29 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
      * for serialization
      */
     static final long serialVersionUID = 3724314652175299374L;
-    private double[] thresholds = getDefaultProbabilities(1);
-    private Classifier kNNClassifier = getDefaultKNN();
+    
+    // Confidence thresholds for different classifiers, to find out if
+    // it should be used for classifying a particular instance
+    private double[] confidenceThresholds = getDefaultThresholds(1);
+    // Last classifier that is used if all other classifers are not confident
+    private Classifier lastClassifier = getDefaultKNN();
+    // Probabilities of selecting training instances to train current classifier
     private double[] selectProbabilities;
+    // Training instances for the sequence of classifiers
     private Instances trainInstances;
-    private Instances kNNTrainingInstances;
+    // Training instances for the last classifier
+    private Instances lastClassifierTrainingInstances;
+    // Shared random generator with the specified seed for experiments repetability
     private Random random = new Random(getSeed());
-    private double percentTrainingInstances = getDefaultPercentage();
+    // How many of training instances will be used for training classifiers in a sequence
+    private double percentTrainingInstances = getDefaultSelectionPercentage();
+    // Flag that shows that last classifier was changed
     boolean lastClassifierChanged = false;
 
     @Override
     public void buildClassifier(Instances dataset) throws Exception {
 
-        if (getClassifiers().length != this.thresholds.length) {
+        if (getClassifiers().length != this.confidenceThresholds.length) {
             throw new Exception("Number of thresholds should be equal to the number of classifers");
         }
 
@@ -75,7 +125,7 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
             updateInstancesProbabilities(classifier);
         }
 
-        addInstancesForKNN();
+        trainLastClassifier();
     }
 
     @Override
@@ -98,9 +148,10 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
             System.out.println("Using kNN classifier");
         }
 
-        return kNNClassifier.distributionForInstance(instance);
+        return lastClassifier.distributionForInstance(instance);
     }
 
+    @Override
     public Enumeration listOptions() {
 
         Vector newVector = new Vector();
@@ -114,7 +165,7 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
                 "P", 1, "-P <thresholds for classifers>"));
 
         newVector.addElement(new Option(
-                "\tkNN classifier that will be used if all user-specified classifiers are not confident in their predictions.",
+                "\tkNN classifier that will be used if all user-specified classifiers are not confident in their predictions. It is recommended to use kNN for this purposes",
                 "K", 1, "-K <IBk classifier>"));
 
         Enumeration enu = super.listOptions();
@@ -124,7 +175,40 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
 
         return newVector.elements();
     }
-
+    
+    /**
+     * Parses a given list of options.
+     *
+     <!-- options-start -->
+     * Valid options are: <p/>
+     * 
+     * <pre> -T &lt;thresholds for classifers&gt;
+     *  Thresholds of confidence for classifiers.</pre>
+     * 
+     * <pre> -P &lt;thresholds for classifers&gt;
+     *  Percentage of training instances that will be used for training each classifier.</pre>
+     * 
+     * <pre> -K &lt;IBk classifier&gt;
+     *  kNN classifier that will be used if all user-specified classifiers are not confident in their predictions.</pre>
+     * 
+     * <pre> -S &lt;num&gt;
+     *  Random number seed.
+     *  (default 1)</pre>
+     * 
+     * <pre> -B &lt;classifier specification&gt;
+     *  Full class name of classifier to include, followed
+     *  by scheme options. May be specified multiple times.
+     *  (default: "weka.classifiers.rules.ZeroR")</pre>
+     * 
+     * <pre> -D
+     *  If set, classifier is run in debug mode and
+     *  may output additional info to the console</pre>
+     * 
+     <!-- options-end -->
+     *     
+     * @param options the list of options as an array of strings
+     * @throws Exception if an option is not supported
+     */
     @Override
     public void setOptions(String[] options) throws Exception {
 
@@ -138,21 +222,21 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
             kNNSpec[0] = "";
             setLastClassifier((IBk) Utils.forName(Filter.class, kNNName, kNNSpec));
         } else {
-            this.kNNClassifier = getDefaultKNN();
+            this.lastClassifier = getDefaultKNN();
         }
 
         String percentTrainingSet = Utils.getOption("P", options);
         if (percentTrainingSet.length() != 0) {
             this.percentTrainingInstances = Double.parseDouble(percentTrainingSet);
         } else {
-            this.percentTrainingInstances = getDefaultPercentage();
+            this.percentTrainingInstances = getDefaultSelectionPercentage();
         }
         
         String thresholdsStr = Utils.getOption("T", options);
         if (percentTrainingSet.length() !=0) {
-            setThresholds(thresholdsStr);
+            setConfidenceThresholds(thresholdsStr);
         } else {
-            this.thresholds = getDefaultThresholds();
+            this.confidenceThresholds = getDefaultThresholds();
         }
 
         super.setOptions(options);
@@ -175,9 +259,9 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
 
         result = new Vector();
 
-        if (thresholdChanged()) {
+        if (confidenceThresholdsChanged()) {
             result.add("-T");
-            result.add("" + Utils.arrayToString(this.thresholds));
+            result.add("" + Utils.arrayToString(this.confidenceThresholds));
         }
 
         if (percentTrainingInstnacesChanged()) {
@@ -187,7 +271,7 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
         
         if (lastClassifierChanged()) {
             result.add("-K");
-            result.add("" + kNNClassifier.getClass().getName() + " " + Utils.joinOptions(((OptionHandler)kNNClassifier).getOptions()));
+            result.add("" + lastClassifier.getClass().getName() + " " + Utils.joinOptions(((OptionHandler)lastClassifier).getOptions()));
         }
 
         options = super.getOptions();
@@ -198,14 +282,26 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
         return (String[]) result.toArray(new String[result.size()]);
     }
     
-    private boolean thresholdChanged() {
-        return this.thresholds.length != 0 && this.thresholds[0] != 0.5;
+    /**
+     * Check if thresholds were changed.
+     * @return true if this value was changed, false otherwise.
+     */
+    private boolean confidenceThresholdsChanged() {
+        return this.confidenceThresholds.length != 0 && this.confidenceThresholds[0] != 0.5;
     }
 
+    /**
+     * Check if percent training instances was changed.
+     * @return true if this value was changed, false otherwise
+     */
     private boolean percentTrainingInstnacesChanged() {
-        return this.percentTrainingInstances != getDefaultPercentage();
+        return this.percentTrainingInstances != getDefaultSelectionPercentage();
     }
 
+    /**
+     * Check if last classifier was changed
+     * @return return true if this value was changed, false otherwise.
+     */
     private boolean lastClassifierChanged() {
         return this.lastClassifierChanged;
     }
@@ -213,37 +309,64 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
     @Override
     public void setClassifiers(Classifier[] classifiers) {
         super.setClassifiers(classifiers);
-        setThresholds(getDefaultProbabilities(classifiers.length));
+        setConfidenceThresholds(getDefaultThresholds(classifiers.length));
     }
     
-    public void setThresholds(String strThresholds) {
+    /**
+     * Set confidence threshold for classifiers
+     * @param strThresholds comma separated values of confidence threshold
+     * @throws Exception if number of classifiers is not equal to the number of thresholds
+     */
+    public void setConfidenceThresholds(String strThresholds) throws Exception {   
+        
         String[] thresholdsStr = strThresholds.split(",");
-        this.thresholds = new double[thresholdsStr.length];
+        this.confidenceThresholds = new double[thresholdsStr.length];
+        
+        if (thresholdsStr.length != getClassifiers().length) {
+            throw new Exception("Number of threshold is not equals to the number of classifiers");
+        }
         
         for (int i = 0; i < thresholdsStr.length; i++) {
-            thresholds[i] = Double.parseDouble(thresholdsStr[i]);
+            confidenceThresholds[i] = Double.parseDouble(thresholdsStr[i]);
         }
     }
     
-    protected void setThresholds(double[] thresholds) {
-        this.thresholds = thresholds;
+    /**
+     * Set confidence thresholds for classifiers
+     * @param confidenceThresholds 
+     */
+    protected void setConfidenceThresholds(double[] confidenceThresholds){       
+        
+        this.confidenceThresholds = confidenceThresholds;
     }
 
-    public String getThresholds() {
-        return Utils.arrayToString(this.thresholds);
+    /**
+     * Get string representation of confidence thresholds
+     * @return comma separated values of confidence thresholds
+     */
+    public String getConfidenceThresholds() {
+        return Utils.arrayToString(this.confidenceThresholds);
     }
 
-    public String thresholdsTipText() {
+    public String confidenceThresholdsTipText() {
         return "Confidence level for each of the classifiers. First threshold is a confidence leverl"
                 + "for the first classifier.";
     }
 
+    /**
+     * Get classifier that will be used 
+     * @return 
+     */
     public Classifier getLastClassifier() {
-        return this.kNNClassifier;
+        return this.lastClassifier;
     }
 
-    public void setLastClassifier(Classifier kNNClassifier) {
-        this.kNNClassifier = kNNClassifier;
+    /**
+     * Set last classifier that will be used if all previous classifiers are not confident
+     * @param lastClassifier - classifier that will be used
+     */
+    public void setLastClassifier(Classifier lastClassifier) {
+        this.lastClassifier = lastClassifier;
         this.lastClassifierChanged = true;
     }
 
@@ -252,10 +375,18 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
                 + "the user specified classifers are confident in their decision";
     }
 
+    /**
+     * Get percent of instances that will be used for training each classifier.
+     * @return percent of instances that will be used for training each classifier.
+     */
     public double getPercentTrainingInstances() {
         return this.percentTrainingInstances;
     }
 
+    /**
+     * Set percent of training instances that will be used to train each classifier.
+     * @param percentTrainingInstances 
+     */
     public void setPercentTrainingInstances(double percentTrainingInstances) {
         this.percentTrainingInstances = percentTrainingInstances;
     }
@@ -294,20 +425,28 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
         return technicalInformation;
     }
 
+    /**
+     * Randomly divide training instances into two categories: training instances
+     * for classifiers in sequence and training instances for the last classifier.
+     * @param instances - all training instances
+     */
     private void divideInstances(Instances instances) {
         this.trainInstances = new Instances(instances, 0, 0);
-        this.kNNTrainingInstances = new Instances(instances, 0, 0);
+        this.lastClassifierTrainingInstances = new Instances(instances, 0, 0);
 
         for (int i = 0; i < instances.numInstances(); i++) {
             Instance instance = instances.instance(i);
             if (this.random.nextDouble() >= 0.5) {
                 this.trainInstances.add(instance);
             } else {
-                this.kNNTrainingInstances.add(instance);
+                this.lastClassifierTrainingInstances.add(instance);
             }
         }
     }
 
+    /**
+     * Initialise probabilities of selecting each training instance
+     */
     private void initializeInstancesProbabilities() {
 
         this.selectProbabilities = new double[trainInstances.numInstances()];
@@ -318,6 +457,10 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
         }
     }
 
+    /**
+     * Select instances that will be used for training current classifier.
+     * @return training instances for the classifier
+     */
     private Instances selectInstances() {
         Instances selectedInstances = new Instances(trainInstances, 0, 0);
 
@@ -339,6 +482,12 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
         return selectedInstances;
     }
 
+    /**
+     * Update probabilities of selecting instance into a new training set according
+     * to classifier's performance.
+     * @param classifier - classifier that is used to calculate new probability
+     * @throws Exception 
+     */
     private void updateInstancesProbabilities(Classifier classifier) throws Exception {
 
         double sum = 0;
@@ -356,11 +505,15 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
         }
     }
 
-    private void addInstancesForKNN() throws Exception {
+    /**
+     * Train the last classifier.
+     * @throws Exception - if training failed.
+     */
+    private void trainLastClassifier() throws Exception {
 
-        Instances kNNInstances = new Instances(this.kNNTrainingInstances, 0, 0);
-        for (int i = 0; i < this.kNNTrainingInstances.numInstances(); i++) {
-            Instance instance = this.kNNTrainingInstances.instance(i);
+        Instances kNNInstances = new Instances(this.lastClassifierTrainingInstances, 0, 0);
+        for (int i = 0; i < this.lastClassifierTrainingInstances.numInstances(); i++) {
+            Instance instance = this.lastClassifierTrainingInstances.instance(i);
 
             boolean confidentClassifierFound = false;
             Classifier[] classifiers = getClassifiers();
@@ -380,13 +533,24 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
             }
         }
 
-        this.kNNClassifier.buildClassifier(kNNInstances);
+        this.lastClassifier.buildClassifier(kNNInstances);
     }
-
+    /**
+     * Check if current classifier is confident
+     * @param confidence - confidence of classifier during classifying an instance
+     * @param classifierIndex - number of classifier in a sequence
+     * @return true if the classifier is confident, false otherwise
+     */
     private boolean classifierIsConfident(double confidence, int classifierIndex) {
-        return confidence > this.thresholds[classifierIndex];
+        return confidence > this.confidenceThresholds[classifierIndex];
     }
 
+    /**
+     * Get confidence of current classifier.
+     * @param distribution - distribution of probabilities for the classified instance
+     * for the current classifier.
+     * @return confidence value of the classifier.
+     */
     private double getConfidence(double[] distribution) {
         double maxProbability = -1;
 
@@ -399,15 +563,28 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
         return maxProbability;
     }
 
+    /**
+     * Get default kNN classifier that is set as the last classifier.
+     * @return default kNN classifier
+     */
     private IBk getDefaultKNN() {
         return new IBk();
     }
 
+    /**
+     * Get default values for classifier's confidence thresholds.
+     * @return 
+     */
     private double[] getDefaultThresholds() {
-        return getDefaultProbabilities(getClassifiers().length);
+        return getDefaultThresholds(getClassifiers().length);
     }
     
-    private double[] getDefaultProbabilities(int arrSize) {
+    /**
+     * Get default values of confidence thresholds.
+     * @param arrSize - size of the confidence thresholds array
+     * @return default confidence threshold array.
+     */
+    private double[] getDefaultThresholds(int arrSize) {
         double[] probabilities = new double[arrSize];
         
         for (int i = 0; i < probabilities.length; i++) {
@@ -417,9 +594,12 @@ public class MultiStageCascading extends RandomizableMultipleClassifiersCombiner
         return probabilities;
     }
 
-    private double getDefaultPercentage() {
+    /**
+     * Get default value of percent of selected instances for training
+     * @return percent of instances that will be selected for training.
+     */
+    private double getDefaultSelectionPercentage() {
         return 0.8;
     }
-
-   
 }
+
