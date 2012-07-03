@@ -13,21 +13,18 @@
  * You should have received a copy of the GNU General Public License
  * along with MultiStageCascading for Weka.  If not, see <http://www.gnu.org/licenses/>.
  */
-package multistagecascadingforweka;
+package examples;
 
 import java.awt.BorderLayout;
 import java.util.Random;
 import weka.classifiers.Classifier;
 import weka.classifiers.Evaluation;
-import weka.classifiers.functions.Logistic;
-import weka.classifiers.functions.MultilayerPerceptron;
 import weka.classifiers.lazy.IBk;
 import weka.classifiers.meta.MultiStageCascading;
 import weka.classifiers.trees.J48;
 import weka.classifiers.trees.NBTree;
 import weka.core.Instance;
 import weka.core.Instances;
-import weka.core.converters.ArffLoader;
 import weka.core.converters.ConverterUtils.DataSource;
 import weka.gui.treevisualizer.PlaceNode2;
 import weka.gui.treevisualizer.TreeVisualizer;
@@ -56,55 +53,49 @@ class Pair<F, S> {
  * Example of how MultiStage Cascading can be used in your code.
  * @author Ivan Mushketyk <ivan.mushketik at gmail.com>
  */
-public class MultiStageCascadingForWeka {
+public class Example {
 
     /**
      * @param args the command line arguments
      */
     public static void main(String[] args) throws Exception {
+        
+        if (args.length != 1) {
+            System.out.println("Requires path to the dataset as the first and only argument");
+            return;
+        }
+        
+        final String datasetPath = args[0];
+        
+        // Create classifiers
         MultiStageCascading msc = new MultiStageCascading();
         J48 classifier1 = new J48();
         IBk knn = new IBk(3);
         
+        // Set sequence of classifiers
         msc.setClassifiers(new Classifier[] {classifier1, new NBTree()});
         msc.setDebug(true);
-        msc.setLastClassifier(knn);
-        
-        
+        // Set a classifier that will classify an instance that is not classified by all other classifiers
+        msc.setLastClassifier(knn);        
+
+        // First classifier will have confidence threshold 0.95 and the second one 0.97
         msc.setConfidenceThresholds("0.95,0.97");
+        // 80% of instances in training set will be randomly selected to train j-th classifier
         msc.setPercentTrainingInstances(0.8);
         
-        String[] options = msc.getOptions();
         
-        Instances dataset = DataSource.read("D:\\Datasets\\ImageSpam\\WorkFiles\\ARFFs\\textRegionBasedFeatures.arff");
+        Instances dataset = DataSource.read(datasetPath);
         dataset.setClassIndex(dataset.numAttributes() - 1);
         
+        // Create test and training sets
         Pair<Instances, Instances> sets = seprateTestAndTrainingSets(dataset, 0.7);
         Instances trainingSet = sets.getFirst();
         Instances testSet = sets.getSecond();
         
-        
+        // Build cascade classifier
         msc.buildClassifier(trainingSet);
-        
-        // display classifier
-        final javax.swing.JFrame jf =
-                new javax.swing.JFrame("Weka Classifier Tree Visualizer: J48");
-        jf.setSize(500, 400);
-        jf.getContentPane().setLayout(new BorderLayout());
-        TreeVisualizer tv = new TreeVisualizer(null,
-                classifier1.graph(),
-                new PlaceNode2());
-        jf.getContentPane().add(tv, BorderLayout.CENTER);
-        jf.addWindowListener(new java.awt.event.WindowAdapter() {
-
-            public void windowClosing(java.awt.event.WindowEvent e) {
-                jf.dispose();
-            }
-        });
-
-        jf.setVisible(true);
-        tv.fitToScreen();
-        
+       
+        // Evaluate created classifier
         Evaluation eval = new Evaluation(trainingSet);
         eval.evaluateModel(msc, testSet);
         System.out.println(eval.toSummaryString("\nResults\n\n", false));
