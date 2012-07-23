@@ -81,8 +81,7 @@ public class Example {
         // First classifier will have confidence threshold 0.95 and the second one 0.97
         msc.setConfidenceThresholds("0.95,0.97");
         // 80% of instances in training set will be randomly selected to train j-th classifier
-        msc.setPercentTrainingInstances(0.8);
-        
+        msc.setPercentTrainingInstances(0.8);        
         
         Instances dataset = DataSource.read(datasetPath);
         dataset.setClassIndex(dataset.numAttributes() - 1);
